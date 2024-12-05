@@ -2,7 +2,7 @@ import wave
 import numpy as np
 import pyaudio
 import pygame
-import threading
+# import threading
 import time
 import smbus
 import RPi.GPIO as GPIO
@@ -12,6 +12,8 @@ import random
 # Pin setup
 BUTTON_GPIO = 20  # Button pin
 LIGHT_GPIO = 21   # Light pin
+
+STOP_EV=0
 
 # GPIO setup
 GPIO.setmode(GPIO.BCM)  # Use BCM pin numbering
@@ -27,13 +29,13 @@ ON_VAL =0
 BRIGHT_IDX=49
 DIM_IDX=28
 # Set the target duration in seconds
-STAR_ON_TIME = 6
-CHANNEL_1_B_TIME = 23
-CHANNEL_2_B_TIME = 61
-CHANNEL_3_B_TIME = 65
-DIM_TIME = 73
-ALL_DIM_TIME = 107
-STOP_TIME = 114
+STAR_ON_TIME = 0
+CHANNEL_1_B_TIME = 18
+CHANNEL_2_B_TIME = 58
+CHANNEL_3_B_TIME = 62
+DIM_TIME = 101
+ALL_DIM_TIME = 110
+STOP_TIME = 115
 TEST_INTERVAL=2
 
 SLEEP_TIME= 0.5
@@ -62,6 +64,7 @@ bad_write=0
 bus = smbus.SMBus(1)  # Use 0 for older Raspberry Pi models
    
 def set_all_channels(test_val):
+   set_att_vals(test_val)
    print(f"all to {test_val}")
    reset_message = [
       CHANNEL_BASE, test_val,
@@ -186,6 +189,33 @@ def idx_one_off():
       # time.sleep(3)
    except Exception as e:
       print(f"Error in one_off: {e}") 
+def zero_helper(test_val):
+   global CURRENT_ATT_VALS
+   # print(f"one to {test_val}")
+   CURRENT_ATT_VALS[0]=test_val
+   reset_message = [
+      CHANNEL_BASE, test_val,
+      CHANNEL_BASE + 1, CURRENT_ATT_VALS[1],
+      CHANNEL_BASE + 2, CURRENT_ATT_VALS[2],
+      CHANNEL_BASE + 3, CURRENT_ATT_VALS[3],
+      ]
+   try:
+      bus.write_i2c_block_data(DEVICE_ADDRESS, 0, reset_message)
+   except Exception as e:
+      print(f"Error resetting channels: {e}")
+def idx_zero_off():
+   # global CURRENT_ATT_VALS
+   # CURRENT_ATT_VALS[1]=71
+   try:
+      print("turning 0 off...")
+      for i in range(OFF_VAL):
+         zero_helper(i)
+         time.sleep(ITER_TIME)
+      print("0 off now...")
+      time.sleep(SLEEP_TIME)
+      # time.sleep(3)
+   except Exception as e:
+      print(f"Error in zero_off: {e}") 
       
 def turn_on(channel):
    global CURRENT_ATT_VALS
@@ -258,7 +288,7 @@ def log_time_on_space(start_time, output_file, stop_event):
 
 # Function to stream audio and process the envelope
 def play_and_extract_envelope(file_path, stop_event, output_file, time_file):
-   global CURRENT_ATT_VALS, DIM_VAL, BRIGHT_VAL
+   global CURRENT_ATT_VALS, DIM_VAL, BRIGHT_VAL, STOP_EV, OFF_VAL
    try:
       # with wave.open(file_path, 'rb') as wav_file, open(output_file, 'w') as file:
       with open(output_file, 'w') as file:
@@ -288,15 +318,15 @@ def play_and_extract_envelope(file_path, stop_event, output_file, time_file):
          # Record the start time
          start_time = time.time()
          
-         # Start a thread for monitoring the spacebar press
-         logging_thread = threading.Thread(target=log_time_on_space, args=(start_time, time_file, stop_event))
-         logging_thread.start()
-         threads = [logging_thread]
+         # # Start a thread for monitoring the spacebar press
+         # logging_thread = threading.Thread(target=log_time_on_space, args=(start_time, time_file, stop_event))
+         # logging_thread.start()
+         # threads = [logging_thread]
          
-         thread = threading.Thread(target=turn_on(1))
-         thread.start()  # Start the thread without joining
-         threads.append(thread)  # Add thread to the list
-         print(f"Started thread for space bar logs (non-blocking) ")
+         # thread = threading.Thread(target=turn_on(1))
+         # thread.start()  # Start the thread without joining
+         # threads.append(thread)  # Add thread to the list
+         # print(f"Started thread for space bar logs (non-blocking) ")
          
          channels_set=[0,0,0,0]
          
@@ -311,7 +341,8 @@ def play_and_extract_envelope(file_path, stop_event, output_file, time_file):
          
          # Process audio in chunks
          # while not stop_event.is_set() and pygame.mixer.get_busy():
-         while not stop_event.is_set():
+         # while not stop_event.is_set():
+         while STOP_EV==0:
          
             # print(CURRENT_ATT_VALS)
             # frames = wav_file.readframes(chunk_size)
@@ -359,11 +390,11 @@ def play_and_extract_envelope(file_path, stop_event, output_file, time_file):
             # MARY AND JOSEPH
             if elapsed_time >= CHANNEL_1_B_TIME and channels_set[1] == 0:
                channels_set[1] = 1
-               # turn_on(1)
-               thread = threading.Thread(target=turn_on, args=(1,))
-               thread.start()  # Start the thread without joining
-               threads.append(thread)  # Add thread to the list
-               print(f"Started thread for channel 1 (non-blocking) at time {elapsed_time}")
+               turn_on(1)
+               # thread = threading.Thread(target=turn_on, args=(1,))
+               # thread.start()  # Start the thread without joining
+               # threads.append(thread)  # Add thread to the list
+               # print(f"Started thread for channel 1 (non-blocking) at time {elapsed_time}")
                print(f'{channels_set}')
                print(f'{CURRENT_ATT_VALS}')
                # set_relay_attenuation(envelope_value, brighten_channel=1)
@@ -371,11 +402,11 @@ def play_and_extract_envelope(file_path, stop_event, output_file, time_file):
             # SHEPHERD
             if elapsed_time >= CHANNEL_2_B_TIME and len(channels_set) > 2 and channels_set[2] == 0:
                channels_set[2] = 1
-               # turn_on(2)
-               thread = threading.Thread(target=turn_on, args=(2,))
-               thread.start()  # Start the thread without joining
-               threads.append(thread)  # Add thread to the list
-               print(f"Started thread for channel 2 (non-blocking) at time {elapsed_time}")
+               turn_on(2)
+               # thread = threading.Thread(target=turn_on, args=(2,))
+               # thread.start()  # Start the thread without joining
+               # threads.append(thread)  # Add thread to the list
+               # print(f"Started thread for channel 2 (non-blocking) at time {elapsed_time}")
                print(f'{channels_set}')
                print(f'{CURRENT_ATT_VALS}')
                # set_relay_attenuation(envelope_value, brighten_channel=2)
@@ -383,11 +414,11 @@ def play_and_extract_envelope(file_path, stop_event, output_file, time_file):
             # WISEMEN
             if elapsed_time >= CHANNEL_3_B_TIME and len(channels_set) > 3 and channels_set[3] == 0:
                channels_set[3] = 1
-               # turn_on(3)
-               thread = threading.Thread(target=turn_on, args=(3,))
-               thread.start()  # Start the thread without joining
-               threads.append(thread)  # Add thread to the list
-               print(f"Started thread for channel 3 (non-blocking) at time {elapsed_time}")
+               turn_on(3)
+               # thread = threading.Thread(target=turn_on, args=(3,))
+               # thread.start()  # Start the thread without joining
+               # threads.append(thread)  # Add thread to the list
+               # print(f"Started thread for channel 3 (non-blocking) at time {elapsed_time}")
                print(f'{channels_set}')
                print(f'{CURRENT_ATT_VALS}')
                # set_relay_attenuation(envelope_value, brighten_channel=3)
@@ -398,11 +429,11 @@ def play_and_extract_envelope(file_path, stop_event, output_file, time_file):
                channels_set[2] = 2
                print(f'{channels_set}')
                print(f'{CURRENT_ATT_VALS}')
-               # idx_two_three_off()
-               thread = threading.Thread(target=idx_two_three_off)
-               thread.start()  # Start the thread without joining
-               threads.append(thread)  # Add thread to the list
-               print(f"Started thread for channel 2 and 3 (non-blocking) at time {elapsed_time}")
+               idx_two_three_off()
+               # thread = threading.Thread(target=idx_two_three_off)
+               # thread.start()  # Start the thread without joining
+               # threads.append(thread)  # Add thread to the list
+               # print(f"Started thread for channel 2 and 3 (non-blocking) at time {elapsed_time}")
                # temp_0=CURRENT_ATT_VALS[0]
                # temp_1=CURRENT_ATT_VALS[1]
                # CURRENT_ATT_VALS=[temp_0,temp_1,DIM_VAL,DIM_VAL]
@@ -414,15 +445,21 @@ def play_and_extract_envelope(file_path, stop_event, output_file, time_file):
             if elapsed_time >= ALL_DIM_TIME and len(channels_set) > 3 and channels_set[3] == 1:
                channels_set[3] = 2
                # idx_one_off()
-               thread = threading.Thread(target=idx_one_off)
-               thread.start()  # Start the thread without joining
-               threads.append(thread)  # Add thread to the list
-               print(f"Started thread for channel 1 (non-blocking) at time {elapsed_time}")
+               idx_zero_off()
+               CURRENT_ATT_VALS[0]=OFF_VAL
+               idx_one_off()
+               
+               # thread = threading.Thread(target=idx_one_off)
+               # thread.start()  # Start the thread without joining
+               # threads.append(thread)  # Add thread to the list
+               # print(f"Started thread for channel 1 (non-blocking) at time {elapsed_time}")
                # set_all_channels(DIM_IDX)
             
             if elapsed_time>= STOP_TIME:
                print("Stopping")
-               stop_event.set()
+               # all_off()
+               # stop_event.set()
+               STOP_EV=1
                break
                
             # Simulate real-time processing (optional)
@@ -435,9 +472,9 @@ def play_and_extract_envelope(file_path, stop_event, output_file, time_file):
          # p.terminate()
          # stop_event.set()
          # pygame.mixer.music.stop()
-         for thread in threads:
-            thread.join()
-         print("All threads have completed. Main program exiting.")
+         # for thread in threads:
+         #    thread.join()
+         # print("All threads have completed. Main program exiting.")
          
          
 
@@ -450,24 +487,31 @@ def play_and_extract_envelope(file_path, stop_event, output_file, time_file):
 
 # Main function
 def main():
-   global CURRENT_ATT_VALS
+   global CURRENT_ATT_VALS, STOP_EV, OFF_VAL, SLEEP_TIME
    file_path = "Christmas_Village_Station_2_AUDIO_trimmed.wav"  # Replace with your .wav file path
    output_file = "envelope_values.txt"  # Output file for envelope values
    time_file = "elapsed_times.txt"  # File to log elapsed times
 
-   stop_event = threading.Event()  # Event to signal threads to stop
+   # stop_event = threading.Event()  # Event to signal threads to stop
    # CURRENT_ATT_VALS=[50,50,50,50]
-   set_all_channels(0)
+   # set_all_channels(0)
+   all_off()
+   #turn_on(0)
+   turn_on(1)
    
    try:
-      # while True:
-      #   button_state = GPIO.input(BUTTON_GPIO)
-      #   if button_state == GPIO.LOW:  # Button is pressed (low)
-      #       GPIO.output(LIGHT_GPIO, GPIO.HIGH)  # Turn the light off
+      while True:
+         button_state = GPIO.input(BUTTON_GPIO)
+         if button_state == GPIO.LOW:  # Button is pressed (low)
+            GPIO.output(LIGHT_GPIO, GPIO.HIGH)  # Turn the light off
             # Start audio playback and envelope processing in the same thread
-            CURRENT_ATT_VALS=[0,0,0,0]
+            stop_event=0
+            # CURRENT_ATT_VALS=[OFF_VAL,OFF_VAL,OFF_VAL,OFF_VAL]
+            set_att_vals(OFF_VAL)
             # set_all_channels(0)
-            all_off()
+            # all_off()
+            idx_one_off()
+            # time.sleep(1)
             # Initialize pygame mixer
             pygame.mixer.init()
             # Load the .wav file
@@ -480,14 +524,23 @@ def main():
             while pygame.mixer.get_busy():
                time.sleep(0.1)
             print("loop done")
+            set_att_vals(OFF_VAL)
+            # set_all_channels(0)
+            time.sleep(7)
+            # all_off()
+            # turn_on(0)
+            turn_on(1)
+   
+            continue
             # time.sleep(2)
-      #   else:
-      #       GPIO.output(LIGHT_GPIO, GPIO.LOW)  # Turn the light on
-      #   time.sleep(0.1)  # Add a small delay to debounce
+         else:
+         #       STOP_EV=0
+            GPIO.output(LIGHT_GPIO, GPIO.LOW)  # Turn the light on
+         time.sleep(0.1)  # Add a small delay to debounce
       
    except KeyboardInterrupt:
       print("\nKeyboard interrupt received. Exiting gracefully...")
-      stop_event.set()
+      STOP_EV=1
    except Exception as e:
       print(f"An unexpected error occurred: {e}")
    finally:
