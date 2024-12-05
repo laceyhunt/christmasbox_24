@@ -1,0 +1,9 @@
+Elapsed Time Logs
+Elapsed time: 1.05 seconds
+Elapsed time: 3.50 seconds
+Elapsed time: 7.46 seconds
+Elapsed time: 9.14 seconds
+Elapsed time: 11.49 seconds
+Elapsed time: 12.38 seconds
+Elapsed time: 13.42 seconds
+Elapsed time: 13.86 seconds
