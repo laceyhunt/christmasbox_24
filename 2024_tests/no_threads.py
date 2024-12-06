@@ -524,7 +524,7 @@ def main():
             while pygame.mixer.get_busy():
                time.sleep(0.1)
             print("loop done")
-            set_att_vals(OFF_VAL)
+            # set_att_vals(OFF_VAL)
             # set_all_channels(0)
             time.sleep(7)
             # all_off()
